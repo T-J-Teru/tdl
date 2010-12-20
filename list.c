@@ -38,20 +38,23 @@ struct list_options {
 #define INDENT_TAB 3
 
 /*{{{ Colour definitions */
-#define RED     "[31m[1m"
-#define GREEN   "[32m"
-#define YELLOW  "[33m[1m"
-#define BLUE    "[34m"
-#define MAGENTA "[35m"
-#define CYAN    "[36m"
-#define NORMAL  "[0m"
-#define DIM     "[37m[2m"
-#define DIMCYAN "[36m[2m"
+static void load_colours_from_env( void );
+void colours_init(struct list_options *options);
 
-/* Table to map priority levels to colours */
-static char *colour_table[] = {
-  NORMAL, BLUE, CYAN, NORMAL, YELLOW, RED
-};
+typedef const char* colour_t;
+
+static struct {
+  colour_t *priority;
+  colour_t header;
+  colour_t normal;
+  colour_t days;
+  colour_t narrow;
+  colour_t kids;
+  colour_t is_done;
+  colour_t is_ignored;
+  colour_t is_postponed;
+  colour_t is_deferred;
+} colours;
 
 static char *priority_text[] = {
   "UNKNOWN!", "verylow", "low", "normal", "high", "urgent"
@@ -72,7 +75,7 @@ void do_bullet_indent(int indent)/*{{{*/
   for (i=0; i<indent; i++) putchar((i == n) ? '-' : ' ');
 }
 /*}}}*/
-static void print_timestamp(int timestamp, char *leader, int indent, int monochrome)/*{{{*/
+static void print_timestamp(int timestamp, char *leader, int indent)/*{{{*/
 {
   char buffer[32];
   time_t now, timestamp2;
@@ -87,17 +90,12 @@ static void print_timestamp(int timestamp, char *leader, int indent, int monochr
   do_indent(indent+2);
   if (days_ago < 0) {
     days_ahead = - days_ago;
-    if (monochrome) {
-      printf("%s: %s (%ld day%s ahead)\n", leader, buffer, days_ago, (days_ahead == 1) ? "" : "s");
-    } else {
-      printf("%s%s:%s %s %s(%ld day%s ahead)%s\n", GREEN, leader, NORMAL, buffer, MAGENTA, days_ahead, (days_ahead == 1) ? "" : "s", NORMAL);
-    }
+    printf("%s%s:%s %s %s(%ld day%s ahead)%s\n", 
+	   colours.header, leader, colours.normal, 
+	   buffer, 
+	   colours.days, days_ahead, (days_ahead == 1) ? "" : "s", colours.normal);
   } else {
-    if (monochrome) {
-      printf("%s: %s (%ld day%s ago)\n", leader, buffer, days_ago, (days_ago == 1) ? "" : "s");
-    } else {
-      printf("%s%s:%s %s (%ld day%s ago)\n", GREEN, leader, NORMAL, buffer, days_ago, (days_ago == 1) ? "" : "s");
-    }
+    printf("%s%s:%s %s (%ld day%s ago)\n", colours.header, leader, colours.normal, buffer, days_ago, (days_ago == 1) ? "" : "s");
   }
 }
 /*}}}*/
@@ -145,71 +143,51 @@ static void print_details(struct node *y, int indent, int summarise_kids, const 
   narrow_prefix = get_narrow_prefix();
 
   if (narrow_prefix) {
-    if (options->monochrome) printf("%s%s", narrow_prefix, index_buffer_len ? "." : "");
-    else                     printf("%s%s%s%s", BLUE, narrow_prefix, index_buffer_len ? "." : "", NORMAL);
+    printf("%s%s%s%s", colours.narrow, narrow_prefix, index_buffer_len ? "." : "", colours.normal);
   }
   
-  if (options->monochrome) printf("%s", index_buffer);
-  else                     printf("%s%s%s", GREEN, index_buffer, NORMAL);
+  printf("%s%s%s", colours.header, index_buffer, colours.normal);
 
   if (summarise_kids && (n_kids > 0)) {
-    if (options->monochrome) printf(" [%d/%d]", n_open_kids, n_kids);
-    else                     printf(" %s[%d/%d]%s", CYAN, n_open_kids, n_kids, NORMAL);
+    printf(" %s[%d/%d]%s", colours.kids, n_open_kids, n_kids, colours.normal);
   }
 
   if (show_state && !options->verbose) {
     if (is_ignored) {
-      if (options->monochrome) printf(" (IGNORED)");
-      else                     printf(" %s(IGNORED)%s", BLUE, NORMAL);
+      printf(" %s(IGNORED)%s", colours.is_ignored, colours.normal);
     } else if (is_done) {
-      if (options->monochrome) printf(" (DONE)");
-      else                     printf(" %s(DONE)%s", CYAN, NORMAL);
+      printf(" %s(DONE)%s", colours.is_done, colours.normal);
     } else if (is_postponed) {
-      if (options->monochrome) printf(" (POSTPONED)");
-      else                     printf(" %s(POSTPONED)%s", MAGENTA, NORMAL);
+      printf(" %s(POSTPONED)%s", colours.is_postponed, colours.normal);
     } else if (is_deferred) {
-      if (options->monochrome) printf(" (DEFERRED)");
-      else                     printf(" %s(DEFERRED)%s", MAGENTA, NORMAL);
+      printf(" %s(DEFERRED)%s", colours.is_deferred, colours.normal);
     }
     printf(" : ");
   } else {
     printf(" ");
   }
 
-  if (!options->monochrome) printf("%s", is_done ? CYAN : is_postponed ? MAGENTA : colour_table[y->priority]);
+  printf("%s", ( is_done ? colours.is_done : 
+		 ( is_postponed ? colours.is_postponed : 
+		   colours.priority[y->priority])));
 
 #if 0
-  
   if (summarise_kids && (n_kids > 0)) {
-    if (options->monochrome) {
-      printf("%s [%d/%d] %s", index_buffer, n_open_kids, n_kids,
-             (show_state && !options->verbose && is_ignored) ? "(IGNORED) : " : 
-             (show_state && !options->verbose && is_done) ? "(DONE) : " : 
-             (show_state && !options->verbose && is_done) ? "(DONE) : " : 
-             (show_state && !options->verbose && (y->arrived > now)) ? "(DEFERRED) : " : ": ");
-    } else {
-      printf("%s%s %s[%d/%d]%s %s%s", GREEN, index_buffer, CYAN, n_open_kids, n_kids, NORMAL,
+      printf("%s%s %s[%d/%d]%s %s%s", 
+	     colours.header, index_buffer, 
+	     CYAN, n_open_kids, n_kids, colours.normal,
              (show_state && !options->verbose && is_ignored) ? BLUE "(IGNORED) " NORMAL :
              (show_state && !options->verbose && is_done) ? CYAN "(DONE) " NORMAL :
              (show_state && !options->verbose && is_postponed) ? MAGENTA "(POSTPONED) " :
              (show_state && !options->verbose && (y->arrived > now)) ? MAGENTA "(DEFERRED) " : "",
-             is_done ? CYAN : is_postponed ? MAGENTA : colour_table[y->priority]);
-    }
+             is_done ? CYAN : is_postponed ? MAGENTA : colours.priority[y->priority]);
   } else {
-    if (options->monochrome) {
-      printf("%s %s", index_buffer,
-             (show_state && !options->verbose && is_ignored) ? "(IGNORED) : " : 
-             (show_state && !options->verbose && is_done) ? "(DONE) : " : 
-             (show_state && !options->verbose && is_postponed) ? "(POSTPONED) : " :
-             (show_state && !options->verbose && (y->arrived > now)) ? "(DEFERRED) : " : ": ");
-    } else {
-      printf("%s%s%s %s%s", GREEN, index_buffer, NORMAL,
+      printf("%s%s%s %s%s", colours.header, index_buffer, colours.normal,
              (show_state && !options->verbose && is_ignored) ? BLUE "(IGNORED) " NORMAL :
              (show_state && !options->verbose && is_done) ? CYAN "(DONE) " NORMAL :
              (show_state && !options->verbose && is_postponed) ? MAGENTA "(POSTPONED) " :
              (show_state && !options->verbose && (y->arrived > now)) ? MAGENTA "(DEFERRED) " : "",
-             is_done ? CYAN : is_postponed ? MAGENTA : colour_table[y->priority]);
-    }
+             is_done ? CYAN : is_postponed ? MAGENTA : colours.priority[y->priority]);
   }
 #endif
   for (p = y->text; *p; p++) {
@@ -218,20 +196,17 @@ static void print_details(struct node *y, int indent, int summarise_kids, const 
       do_indent(indent + 5);
     }
   }
-  if (!options->monochrome) printf("%s", NORMAL);
+  printf("%s", colours.normal);
   printf("\n");
 
   if (options->verbose) {
-    print_timestamp(y->arrived, "Arrived", indent, options->monochrome);
+    print_timestamp(y->arrived, "Arrived", indent);
     do_indent(indent + 2);
-    if (options->monochrome) {
-      printf("Priority: %s\n", priority_text[y->priority]);
-    } else {
-      printf("%sPriority: %s%s%s\n",
-          GREEN, colour_table[y->priority], priority_text[y->priority], NORMAL);
-    }
-    if (y->required_by > 0) print_timestamp(y->required_by, "Required by", indent, options->monochrome);
-    if (y->done > 0) print_timestamp(y->done, "Completed", indent, options->monochrome);
+    printf("%sPriority: %s%s%s\n",
+	   colours.header, colours.priority[y->priority], 
+	   priority_text[y->priority], colours.normal);
+    if (y->required_by > 0) print_timestamp(y->required_by, "Required by", indent);
+    if (y->done > 0) print_timestamp(y->done, "Completed", indent);
     printf("\n");
   }
 
@@ -570,6 +545,8 @@ int process_list(char **x)/*{{{*/
     x++;
   }
   
+  colours_init(&options);
+
   if (!any_paths) {
     struct node *narrow_top = get_narrow_top();
     if (narrow_top) {
@@ -590,5 +567,269 @@ int process_list(char **x)/*{{{*/
   if (hits) free(hits);
   
   return 0;
+}
+/*}}}*/
+
+static const colour_t RED = "[31m[1m";
+static const colour_t GREEN = "[32m";
+static const colour_t YELLOW = "[33m[1m";
+static const colour_t BLUE = "[34m";
+static const colour_t MAGENTA = "[35m";
+static const colour_t CYAN = "[36m";
+static const colour_t NORMAL = "[0m";
+/*static const colour_t DIM = "[37m[2m";*/
+/*static const colour_t DIMCYAN = "[36m[2m";*/
+
+void colours_init(struct list_options *options)/*{{{*/
+{
+  /* Table to map priority levels to colours */
+  static colour_t priority_colours[] =
+    { NULL, NULL, NULL, NULL, NULL, NULL };
+
+  colours.priority = priority_colours;
+
+  if ( options->monochrome ) {
+    static const colour_t NO_COLOUR = "";
+    priority_colours[PRI_UNKNOWN] = NO_COLOUR;
+    priority_colours[PRI_VERYLOW] = NO_COLOUR;
+    priority_colours[PRI_LOW]     = NO_COLOUR;
+    priority_colours[PRI_NORMAL]  = NO_COLOUR;
+    priority_colours[PRI_HIGH]    = NO_COLOUR;
+    priority_colours[PRI_URGENT]  = NO_COLOUR;
+
+    colours.header   = NO_COLOUR;
+    colours.normal   = NO_COLOUR;    
+  } else {
+    priority_colours[PRI_UNKNOWN] = NORMAL;
+    priority_colours[PRI_VERYLOW] = BLUE;
+    priority_colours[PRI_LOW]     = CYAN;
+    priority_colours[PRI_NORMAL]  = NORMAL;
+    priority_colours[PRI_HIGH]    = YELLOW;
+    priority_colours[PRI_URGENT]  = RED;
+
+    colours.normal   = NORMAL;
+    
+    colours.header   = GREEN;
+    colours.days = MAGENTA;
+    colours.narrow = BLUE;
+    colours.kids = CYAN;
+    colours.is_done = CYAN;
+    colours.is_ignored = BLUE;
+    colours.is_postponed = MAGENTA;
+    colours.is_deferred = MAGENTA;
+
+    load_colours_from_env();      
+  } 
+}
+/*}}}*/
+
+static const char * const COLOUR_ENV_VAR = "TDL_LIST_COLOURS";
+
+char *parse_colour_text(const char *text, size_t length) { /*{{{*/
+
+  /* Sanity check */
+  if ( length == 0 )
+    return NULL;
+
+  if ( isalpha (*text) ) {
+    /* Look for some popular colour names */
+    if ( strncasecmp ("red", text, length) == 0 ) {
+      return strdup(RED);
+    } else if ( strncasecmp ("blue", text, length) == 0 ) {
+      return strdup(BLUE);
+    } else if ( strncasecmp ("green", text, length) == 0 ) {
+      return strdup(GREEN);
+    } else if ( strncasecmp ("yellow", text, length) == 0 ) {
+      return strdup(YELLOW);
+    } else if ( strncasecmp ("magenta", text, length) == 0 ) {
+      return strdup(MAGENTA);
+    } else if ( strncasecmp ("cyan", text, length) == 0 ) {
+      return strdup(CYAN);
+    } else {
+      fprintf(stderr, "In environment '%s' unknown colour '%.*s'\n",
+	      COLOUR_ENV_VAR, length, text);
+      return NULL;
+    }
+  } else {
+    /* Parse a colour specifier that looks like this : 
+     *    [0-9][0-9]?(;[0-9][0-9]?)?
+     * For exampe:
+     *    "0", "00", "00;0", "00;00" 
+     * are all valid.
+     * Result for each of the above would be in the form:
+     *    "<esc>[0m", "<esc>[00m", 
+     *	  "<esc>[00m<esc>[0m", "<esc>[00m<esc>[00m"
+     */
+    char *colour_spec = (char*)malloc(sizeof(char) * 11);
+    if ( colour_spec == NULL )
+      return NULL;
+    
+    char *ptr = colour_spec;
+
+    int had_semicolon = 0;
+    int digits_in_block = 0;
+    int digit_blocks = 0;
+      
+    *ptr++ = '';
+    *ptr++ = '[';
+
+    const char *end = text + length;
+    const char *src = text;
+
+    do {
+      /* If we have a digit, and we've not had either too many in a
+	 row, or too many groups of digits in total, then copy this
+	 into the colour specifier and increment the counters. */
+      if ( isdigit (*src) && 
+	   (digits_in_block < 2) && 
+	   (digit_blocks < 2)) 
+      {
+	if ( digits_in_block == 0 )
+	  digit_blocks++;
+	digits_in_block++;
+	*ptr++ = *src++;
+      } 
+      /* If we have a semicolon, and it's our only one, and we've had
+	 some digits already then start the second part of the colour
+	 specifier. */
+      else if ( !had_semicolon && 
+		  (*src == ';') && 
+		  (digits_in_block > 0) ) 
+      {
+	src++;   /* Skip the ";" */
+	*ptr++ = 'm';
+	*ptr++ = '';
+	*ptr++ = '[';
+	digits_in_block = 0;
+	had_semicolon = 1; /* Only one ";" allowed */
+      } 
+      /* Everything else is a broken colour definition */
+      else 
+      {
+	fprintf (stderr, "In environment '%s', invalid colour '%.*s'\n",
+		 COLOUR_ENV_VAR, length, text);
+	free (colour_spec);
+	return NULL;
+      }
+    } while ( src < end );
+    *ptr++ = 'm';
+    *ptr++ = '\0';
+
+    return colour_spec;
+  }
+
+  return NULL;
+}
+/*}}}*/
+
+static void load_colours_from_env( void ) { /*{{{*/
+  const char* env_colours = getenv(COLOUR_ENV_VAR);
+  if ( env_colours == 0 ) 
+    return;
+
+  const char *c = env_colours;
+  
+  while (*c != '\0') {
+
+    /* Parse "<ATTR>=<colour-spec>:" We allow the final ':' to be
+     * missing.  If we get confused, don't understand an <ATTR> or
+     * <colour-spec> then we will scan ahead to the next ':' and try
+     * to pick up from there.
+     */
+
+    char *attr_name = 0;   // Start of attr name
+    size_t attr_len = 0;      // Length of the attr
+  
+    char *colour_text = 0; // Start of colour-spec
+    size_t colour_len = 0;    // Length of colour-specxs
+
+    const char *tmp = c;
+
+    /* Move to first non alpha character */
+    while ( isalpha(*c) || *c == '_' ) 
+      c++;
+
+    attr_len = c - tmp;
+
+    /* Now create a NULL terminated copy of the attr name */
+    attr_name = strndup(tmp, attr_len);
+    if ( attr_name == NULL )
+      return;
+
+    /* Check we're now at an '=' and skip it */
+    if ( *c != '=' ) {
+      fprintf(stderr, "In environment '%s', '%s' not followed by '='\n", 
+	      COLOUR_ENV_VAR, attr_name);
+      free(attr_name);
+
+      /* Move forward until either end of string or ':' */
+      while ( (*c != ':') && (*c != '\0') )
+	c++;
+      
+      /* We're done if we're at the end of the string */
+      if ( *c == '\0' )
+	return;
+      
+      /* Skip the ':' */
+      c++;
+
+      continue;
+    }
+    c++;
+    
+    /* Now to gather the colour spec */
+    tmp = c;
+    while ( (*c != ':') && (*c != '\0') )
+      c++;
+    
+    colour_len = c - tmp;  
+
+    /* Create a null terminated copy of colour spec */
+    colour_text = parse_colour_text(tmp, colour_len);
+
+    /* parse colour text can return NULL if it doesn't understand
+       the colour, or if it's out of memory. In both cases we 
+       don't try to set any colour here, then continue. */
+
+    if ( colour_text != NULL ) {
+      /* Now find the right attribute to apply the colour to */
+      if ( strcasecmp ("HEADER", attr_name) == 0 ) {
+	colours.header = colour_text;
+      } else if ( strcasecmp ("KIDS", attr_name) == 0 ) {
+	colours.kids = colour_text;
+      } else if ( strcasecmp ("DAYS", attr_name) == 0 ) {
+	colours.days = colour_text;
+      } else if ( strcasecmp ("NARROW", attr_name) == 0 ) {
+	colours.narrow = colour_text;
+      } else if ( strcasecmp ("IS_DONE", attr_name) == 0 ) {
+	colours.is_done = colour_text;
+      } else if ( strcasecmp ("IS_IGNORED", attr_name) == 0 ) {
+	colours.is_ignored = colour_text;
+      } else if ( strcasecmp ("IS_POSTPONED", attr_name) == 0 ) {
+	colours.is_postponed = colour_text;
+      } else if ( strcasecmp ("IS_DEFERRED", attr_name) == 0 ) {
+	colours.is_deferred = colour_text;
+      } else if ( strcasecmp ("PRI_URGENT", attr_name) == 0 ) {
+	colours.priority[PRI_URGENT] = colour_text;
+      } else if ( strcasecmp ("PRI_HIGH", attr_name) == 0 ) {
+	colours.priority[PRI_HIGH] = colour_text;
+      } else if ( strcasecmp ("PRI_LOW", attr_name) == 0 ) {
+	colours.priority[PRI_LOW] = colour_text;
+      } else if ( strcasecmp ("PRI_VLOW", attr_name) == 0 ) {
+	colours.priority[PRI_VERYLOW] = colour_text;
+      } else {
+	fprintf(stderr, "In environment '%s', '%s' unknown\n", 
+		COLOUR_ENV_VAR, attr_name);
+	free (colour_text);
+      }
+    }
+
+    /* Now release memory */
+    free (attr_name);
+
+    /* Skip the ':' */ 
+    if ( *c == ':' )
+      c++;
+  }
 }
 /*}}}*/

@@ -293,6 +293,7 @@ the database, assigning them priorities, and so on.
 * Datespec::            How dates are specified
 * Backup file::         How tdl saves a backup copy of the database
 * Index specification:: How indices can be specified
+* Colour setup::        How to control the colours used
 @end menu
 
 @c {{{ Start and Exit
@@ -1825,7 +1826,58 @@ negative index could be misinterpreted as a depth option.  If you really want
 negative indices for the @command{list} command, terminate the options with
 @samp{--} before providing indices and search patterns.
 @c }}}
+@c {{{ Colour setup
+@node Colour setup
+@section Colour setup
+The colours used by tdl can be controlled by the @var{TDL_LIST_COLOURS} environment variable.  The format of the environment variable is defined as,
 
+@verbatim
+<colour-list> ::= <colour-ctrl> | <colour-ctrl> ":" <colour-list>
+
+<colour-ctrl> ::= <attribute> "=" <colour-spec>
+
+<colour-spec> ::= <colour-name> | <colour-ctrl-code>
+
+<colour-name> ::= "red" | "blue" | "green" | "yellow" | "magenta" | "cyan" 
+
+<colour-ctrl-code> ::= <colour-digits> | <colour-ctrl-tail>
+
+<colour-ctrl-tail> ::= ";" <colour-digits> | ""
+
+<colour-digits> ::= <colour-digit> <colour-digit> | <colour-digit>
+
+<colour-digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+
+<attribute> ::= "HEADER" | "KIDS" | "DAYS" | "NARROW" | "IS_DONE" | 
+                "IS_IGNORED" | "IS_POSTPONED" | "IS_DEFERRED" | 
+                "PRI_URGENT" | "PRI_HIGH" | "PRI_LOW" | "PRI_VLOW" 
+@end verbatim
+
+Each of the @verb{.<attibute>.}s controls a different component that can be given colour in the output. The @verb{.<colour-spec>.} is the colour that the component will take. The @verb{.<colour-spec>.} can be a name such as @verb{.red.}, @verb{.blue.}, etc, or can be given using @verb{.xterm.} like colour escape codes.  For example, to change the colour of the header text to red, the colour of done entries to green (colour code 32), and high priority entries to bold cyan (colour code 36;1), you could use,
+
+@verbatim
+export TDL_LIST_COLOURS=HEADER=red:IS_DONE=32:PRI_HIGH=36;1
+@end verbatim
+
+Each attribute controls the colours of the following components,
+
+@itemize @bullet
+
+@item @verb{.HEADER.}. Controls general header text, for example line indexes.
+
+@item @verb{.KIDS.}. Controls the colour of the child count summaries when using a command such as @samp{tdl list -1}.
+
+@item @verb{.DAYS.}. Controls the colour used to display the number of days ahead within the timestamps.
+
+@item @verb{.NARROW.}. Controls the colour of the narrow prefix when using the narrow command.
+
+@item @verb{.IS_DONE.}, @verb{.IS_IGNORED.}, @verb{.IS_POSTPONED.}, and @verb{.IS_DEFERRED.}. Controls the colour for tasks that are in the done, ignored, postponed, and deferred states respectively.
+
+@item @verb{.PRI_URGENT.}, @verb{.PRI_HIGH.}, @verb{.PRI_LOW.}, and @verb{.PRI_VLOW.}. Controls the colour for tasks that are of priority urgent, high, low, and very-low respectively. 
+
+@end itemize
+
+@c }}}
 @bye
 @c vim:cms=@c\ %s:fdm=marker:fdc=5:syntax=off
 
